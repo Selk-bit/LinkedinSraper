@@ -1,40 +1,18 @@
-from selenium import webdriver
-from selenium.webdriver.chrome.service import Service
+import shutil
+import time
+import psutil
 from selenium.common.exceptions import NoSuchElementException
 from selenium.webdriver.common.by import By
-from selenium.webdriver.chrome.options import Options
 import random
-import undetected_chromedriver as uc
-import chromedriver_autoinstaller
-import urllib.parse
 from time import sleep
 import os
 
-# ---------------------------------------------------
-keyword = "Python Backend Developer"
-url = f"https://www.linkedin.com/jobs/search?keywords={urllib.parse.quote(keyword)}&location=Morocco&geoId=102787409&trk=public_jobs_jobs-search-bar_search-submit&position=1&pageNum=0"
-anchors_xpath = "//a[contains(@href, '/jobs/view')]"
-modal_dismiss_xpath = "//button[contains(@data-tracking-control-name, 'public_jobs_contextual-sign-in-modal_modal_dismiss')]"
-title_xpath = "//h2[contains(@class, 'top-card-layout__title')]"
-description_xpath = "//div[contains(@class, 'description__text')]"
+from urllib3 import request
 
-# ---------------------------------------------------
-
-def get_options():
-    chrome_options = Options()
-    width = random.randint(1000, 2000)
-    height = random.randint(500, 1000)
-    chrome_options.add_argument(f"window-size={width}, {height}")
-    # chrome_options.add_experimental_option("useAutomationExtension", False)
-    # chrome_options.add_argument("--disable-blink-features=AutomationControlled")
-    # chrome_options.add_experimental_option("excludeSwitches", ["enable-automation"])
-    # chrome_options.add_argument('disable-infobars')
-    # chrome_options.add_argument("--headless")
-    # chrome_options.add_argument('--no-sandbox')
-    # chrome_options.add_argument('--disable-dev-shm-usage')
-    chrome_options.add_argument(
-        "user-agent=Mozilla/5.0 (Windows NT 6.1; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/84.0.4147.125 Safari/537.36")
-    return chrome_options
+from constants import main_url, anchors_xpath, modal_dismiss_xpath, card_port_xpath, job_title_xpath, \
+    job_company_name_xpath, job_description_xpath, job_description_xpath, job_location_xpath, job_age_xpath
+from utils import ChromeDriver, LinkedScrapper
+import requests
 
 
 def get_link():
@@ -131,7 +109,7 @@ def kill_chrome(driver):
     driver.close()
     driver.quit()
     kill_chrome_processes()
-    clear_recent_temp_files(temp_dir, age_minutes=200)
+    clear_recent_temp_files("~/.config/google-chrome/smarteez/Application Cache/Cache/", age_minutes=200)
 
 
 def click_forcefully(dr, limit, xpath):
@@ -150,27 +128,57 @@ def click_forcefully(dr, limit, xpath):
             return False
 
 
+def get_job_urls(driver):
+    driver.get(main_url)
+    if check_exists_by_xpath(driver, modal_dismiss_xpath):
+        click_forcefully(driver.find_element(By.XPATH, modal_dismiss_xpath), True, "//body")
+    move_until_found(driver, anchors_xpath, 100)
+    anchors = driver.find_elements(By.XPATH, anchors_xpath)
+    # for anchor in anchors:
+    #     driver.execute_script("arguments[0].scrollIntoView();", anchor)
+    #     # click_forcefully(anchor, True, card_port_xpath)
+    #     job_urls.append(anchor.get_attribute('href'))
+    return [anchor.get_attribute('href') for anchor in anchors]
+
+    # return job_urls
+
+
 if __name__ == '__main__':
     try:
-        chrome_options = get_options()
-        version_main = int(chromedriver_autoinstaller.get_chrome_version().split(".")[0])
-        driver = uc.Chrome(options=chrome_options, version_main=version_main)
-        driver.get(url)
-        if check_exists_by_xpath(driver, modal_dismiss_xpath):
-            click_forcefully(driver.find_element(By.XPATH, modal_dismiss_xpath), True, "//body")
-        move_until_found(driver, anchors_xpath, 100)
-        anchors = driver.find_elements(By.XPATH, anchors_xpath)
-        for anchor in anchors:
-            driver.execute_script("arguments[0].scrollIntoView();", anchor)
-            click_forcefully(anchor, True, title_xpath)
-            print(f"Link: {anchor.get_attribute("href")}")
-            print(f"Title: {get_title(driver, title_xpath)}")
-            print(f"Description: {get_description(driver, description_xpath)}")
-            print("=====================================================================")
-            sleep(random.uniform(2, 5))
-        sleep(10)
-        kill_chrome()
+        print(f"start")
+        driver = ChromeDriver().get_driver()
+        print(f"start 2")
+        job_urls = get_job_urls(driver)
+        print(f"start 3")
+
+        if 'Sign Up' in driver.page_source:
+            print('Sign Up')
+            exit(0)
+
+        linked_scrapper = LinkedScrapper()
+        print(f"{linked_scrapper=}")
+        for url in job_urls:
+
+            driver.get(url)
+            if check_exists_by_xpath(driver, modal_dismiss_xpath):
+                click_forcefully(driver.find_element(By.XPATH, modal_dismiss_xpath), True, "//body")
+
+            job_title = linked_scrapper.get_one_element(driver, job_title_xpath)
+            job_description = linked_scrapper.get_one_element(driver, job_description_xpath, True)
+            company_name = linked_scrapper.get_one_element(driver, job_company_name_xpath)
+            job_location = linked_scrapper.get_one_element(driver, job_location_xpath)
+            job_age = linked_scrapper.get_one_element(driver, job_age_xpath)
+
+            data = {'job_title': job_title, 'job_description': job_description, 'company_name': company_name,
+                    'job_location': job_location, 'job_age': job_age}
+
+            print(f"{data=}")
+            sleep(3)
+
+        kill_chrome(driver)
         driver.quit()
     except Exception as e:
-        kill_chrome()
-        raise e
+        # kill_chrome(driver=driver)
+
+        print(e)
+        sleep(9999)
