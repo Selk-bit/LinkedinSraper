@@ -6,48 +6,11 @@ from selenium.webdriver.common.by import By
 import random
 from time import sleep
 import os
-
-from urllib3 import request
-
-from constants import main_url, anchors_xpath, modal_dismiss_xpath, card_port_xpath, job_title_xpath, \
-    job_company_name_xpath, job_description_xpath, job_description_xpath, job_location_xpath, job_age_xpath
+from constants import main_url, anchors_xpath, modal_dismiss_xpath, job_title_xpath, job_company_name_xpath, \
+    job_description_xpath, job_location_xpath, job_age_xpath
+from db_management.insert_data import session
+from db_management.models import LinkedInCompany, LinkedInJob
 from utils import ChromeDriver, LinkedScrapper
-import requests
-
-
-def get_link():
-    pass
-
-
-def get_title(dr, xpath):
-    try:
-        return dr.find_element(By.XPATH, xpath).text.strip()
-    except AttributeError as e:
-        print(e)
-        return None
-
-
-def get_description(dr, xpath):
-    try:
-        return dr.find_element(By.XPATH, xpath).text
-    except AttributeError as e:
-        return None
-
-
-def get_city():
-    pass
-
-
-def get_work_mode():
-    pass
-
-
-def get_company_name():
-    pass
-
-
-def get_post_date():
-    pass
 
 
 def check_exists_by_xpath(driver, xpath):
@@ -134,29 +97,19 @@ def get_job_urls(driver):
         click_forcefully(driver.find_element(By.XPATH, modal_dismiss_xpath), True, "//body")
     move_until_found(driver, anchors_xpath, 100)
     anchors = driver.find_elements(By.XPATH, anchors_xpath)
-    # for anchor in anchors:
-    #     driver.execute_script("arguments[0].scrollIntoView();", anchor)
-    #     # click_forcefully(anchor, True, card_port_xpath)
-    #     job_urls.append(anchor.get_attribute('href'))
     return [anchor.get_attribute('href') for anchor in anchors]
-
-    # return job_urls
 
 
 if __name__ == '__main__':
     try:
-        print(f"start")
         driver = ChromeDriver().get_driver()
-        print(f"start 2")
         job_urls = get_job_urls(driver)
-        print(f"start 3")
 
         if 'Sign Up' in driver.page_source:
             print('Sign Up')
             exit(0)
 
         linked_scrapper = LinkedScrapper()
-        print(f"{linked_scrapper=}")
         for url in job_urls:
 
             driver.get(url)
@@ -170,9 +123,27 @@ if __name__ == '__main__':
             job_age = linked_scrapper.get_one_element(driver, job_age_xpath)
 
             data = {'job_title': job_title, 'job_description': job_description, 'company_name': company_name,
-                    'job_location': job_location, 'job_age': job_age}
+                    'job_location': job_location, 'job_age': job_age, 'url': url}
 
             print(f"{data=}")
+            # Check if the company already exists
+            company = session.query(LinkedInCompany).filter_by(raison_social=data['company_name']).first()
+
+            # If the company does not exist, create it
+            if not company:
+                company = LinkedInCompany(raison_social=data['company_name'])
+                session.add(company)
+                session.commit()  # Commit to save the new company to the database
+
+            # Insert the job into the LinkedInJob table
+            new_job = LinkedInJob(title=data['job_title'], description=data['job_description'],
+                                  location=data['job_location'], age=data['job_age'], )
+
+            # Add and commit the new job to the database
+            session.add(new_job)
+            session.commit()
+
+            print("Data inserted successfully.")
             sleep(3)
 
         kill_chrome(driver)
