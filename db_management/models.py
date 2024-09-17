@@ -1,4 +1,6 @@
 # models.py
+from numbers import Number
+
 from sqlalchemy.orm import relationship
 from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, Text, Boolean
 from sqlalchemy.ext.declarative import declarative_base
@@ -37,6 +39,8 @@ class LinkedInJob(BaseModel):
     transmitted = Column(Boolean, default=False)
 
 
-class ScrapingJob(BaseModel):
-    __tablename__ = 'scraping_jobs'
-    hash = Column(String(255), unique=True)
+class ScrapingJobResult(BaseModel):
+    __tablename__ = 'scraping_jobs_results'
+    number_of_jobs = Column(Integer, default=0)
+    exited_with_error = Column(Boolean, default=False)
+    error_message = Column(Text)

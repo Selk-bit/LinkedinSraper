@@ -3,7 +3,7 @@ from typing_extensions import Annotated
 from typing import ClassVar, Optional  # Import ClassVar
 
 from db_management.insert_data import session
-from db_management.models import LinkedInCompany, LinkedInJob
+from db_management.models import LinkedInCompany, LinkedInJob, ScrapingJobResult
 
 
 class CompanySerializer(BaseModel):
@@ -142,3 +142,72 @@ class JobSerializer(BaseModel):
         session.add(job)
         session.commit()
         return job
+
+
+################################
+class ScrapingJobResultSerializer(BaseModel):
+    # Define fields using Annotated and StringConstraints for validation
+    number_of_jobs: Annotated[int, StringConstraints()] = 0
+    exited_with_error: bool = False
+    error_message: Optional[Annotated[str, StringConstraints(strip_whitespace=True)]] = None
+
+    # Private attributes to store validation status and errors
+    _validation_errors: Optional[str] = PrivateAttr(default=None)
+    _is_valid: Optional[bool] = PrivateAttr(default=None)
+    _validation_performed: bool = PrivateAttr(default=False)
+
+    # Annotate 'model' as a ClassVar to indicate it's not a field
+    model: ClassVar[type] = ScrapingJobResult
+
+    class Config:
+        from_attributes = True
+
+    def __init__(self, **data):
+        super().__init__(**data)
+        # Indicate that validation has already been performed during __init__
+        self._validation_performed = True
+
+    def validate(self) -> bool:
+        """Custom validate method to manually trigger validation."""
+        if getattr(self, '_validation_performed', False):
+            raise Exception("Validation has already been performed during instantiation. Do not call validate() again.")
+        try:
+            # Validate the data
+            validated_instance = self.__class__.model_validate(self.__dict__)
+            # Update the instance with validated data
+            self.__dict__.update(validated_instance.__dict__)
+            self._is_valid = True
+            # Set validation performed to True to prevent re-validation
+            self._validation_performed = True
+            return True
+        except ValidationError as e:
+            # Store validation errors and set validation status
+            self._validation_errors = str(e)
+            self._is_valid = False
+            return False
+
+    def errors_text(self) -> str:
+        """Return the stored validation error messages."""
+        return self._validation_errors
+
+    def save(self):
+        """Save the data after ensuring validation has been performed and passed."""
+        # Check if validate has been called
+        if self._is_valid is None:
+            raise Exception("Validation has not been performed. Please call validate() before save().")
+        # Check if validation passed
+        if not self._is_valid:
+            raise Exception(f"Cannot save invalid data. Validation errors: {self.errors_text()}")
+
+        data = self.model_dump()
+
+        # Create an instance of the ScrapingJobResult model
+        job_result = self.model(
+            number_of_jobs=data['number_of_jobs'],
+            exited_with_error=data['exited_with_error'],
+            error_message=data.get('error_message')
+        )
+
+        session.add(job_result)
+        session.commit()
+        return job_result

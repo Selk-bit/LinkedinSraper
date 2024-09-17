@@ -13,8 +13,8 @@ from constants import main_url, anchors_xpath, modal_dismiss_xpath, job_title_xp
     job_description_xpath, job_location_xpath, job_age_xpath, url_index_spliter
 from db_management.insert_data import session
 from db_management.models import LinkedInCompany, LinkedInJob
-from serializers import CompanySerializer, JobSerializer
-from utils import ChromeDriver, LinkedScrapper, LinkedInJobScrapper
+from serializers import CompanySerializer, JobSerializer, ScrapingJobResultSerializer
+from utils import ChromeDriver, LinkedScrapper
 
 
 def check_exists_by_xpath(driver, xpath):
@@ -112,17 +112,21 @@ def get_job_urls(driver) -> List[str]:
 
 
 if __name__ == '__main__':
+    number_of_scrapped_jobs = 0
     try:
-
         driver = ChromeDriver().get_driver()
         job_urls = get_job_urls(driver)
 
         if 'Sign Up' in driver.page_source:
-            print('Sign Up')
+            scraping_job_results_serializer = ScrapingJobResultSerializer.model_construct(
+                **{'number_of_jobs': 0, 'exited_with_error': True, 'error_message': "'Sign Up' in driver.page_source"}
+            )
+            scraping_job_results_serializer.validate()
+            scraping_job_results_serializer.save()
             exit(0)
 
         linked_scrapper = LinkedScrapper()
-        for url in job_urls:
+        for url in enumerate(job_urls):
             if session.query(LinkedInJob).filter_by(url=url).first():
                 continue
             driver.get(url)
@@ -140,14 +144,17 @@ if __name__ == '__main__':
                 company_name = company_name.lower().strip()
 
                 # Check if the company already exists
-                # if not session.query(LinkedInCompany).filter_by(raison_social=company_name).first():
                 company = session.query(LinkedInCompany).filter_by(raison_social=company_name).first()
                 if not company:
                     company_serializer = CompanySerializer.model_construct(raison_social=company_name)
                     if company_serializer.validate():
                         company = company_serializer.save()
                     else:
-                        print(f"Validation errors: {company_serializer.errors_text()}")
+                        scraping_job_results_serializer = ScrapingJobResultSerializer.model_construct(
+                            **{'number_of_jobs': number_of_scrapped_jobs, 'exited_with_error': True,
+                               'error_message': company_serializer.errors_text()})
+                        scraping_job_results_serializer.validate()
+                        scraping_job_results_serializer.save()
                         exit()
 
             data = {
@@ -161,8 +168,15 @@ if __name__ == '__main__':
                 job_serializer = JobSerializer.model_construct(**data)
                 if job_serializer.validate():
                     job = job_serializer.save()
+                    number_of_scrapped_jobs += 1
                 else:
-                    print(f"Validation errors: {job_serializer.errors_text()}")
+
+                    scraping_job_results_serializer = ScrapingJobResultSerializer.model_construct(
+                        **{'number_of_jobs': number_of_scrapped_jobs, 'exited_with_error': True,
+                           'error_message': job_serializer.errors_text()})
+                    scraping_job_results_serializer.validate()
+                    scraping_job_results_serializer.save()
+
                     exit()
 
             sleep(3)
@@ -170,6 +184,10 @@ if __name__ == '__main__':
         kill_chrome(driver)
         driver.quit()
     except Exception as e:
-        raise e
+        scraping_job_results_serializer = ScrapingJobResultSerializer.model_construct(
+            **{'number_of_jobs': number_of_scrapped_jobs, 'exited_with_error': True,
+               'error_message': str(e)})
+        scraping_job_results_serializer.validate()
+        scraping_job_results_serializer.save()
     finally:
         session.close()
