@@ -19,3 +19,6 @@ job_age_xpath = "//span[contains(@class, 'posted-time-ago__text topcard__flavor-
 card_port_xpath = "//a[contains(@class, 'base-card__full-link')]"
 
 scrapping_source = 'LinkedIn'
+
+
+url_index_spliter = '&refId'
