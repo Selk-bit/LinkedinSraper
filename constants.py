@@ -1,7 +1,8 @@
 import urllib.parse
 
 keyword = "Python Backend Developer"
-main_url = f"https://www.linkedin.com/jobs/search?keywords={urllib.parse.quote(keyword)}&location=Morocco&geoId=102787409&trk=public_jobs_jobs-search-bar_search-submit&position=1&pageNum=0"
+main_url = f"https://www.linkedin.com/jobs/search?keywords={urllib.parse.quote(keyword)}&f_TPR=r2592000&location=Morocco&geoId=102787409&trk=public_jobs_jobs-search-bar_search-submit&position=1&pageNum=0"
+
 anchors_xpath = "//a[contains(@href, '/jobs/view')]"
 modal_dismiss_xpath = "//button[contains(@data-tracking-control-name, 'public_jobs_contextual-sign-in-modal_modal_dismiss')]"
 title_xpath = "//h2[contains(@class, 'top-card-layout__title')]"

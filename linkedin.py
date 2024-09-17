@@ -113,21 +113,22 @@ def get_job_urls(driver) -> List[str]:
 
 if __name__ == '__main__':
     number_of_scrapped_jobs = 0
+    driver = ChromeDriver().get_driver()
     try:
-        driver = ChromeDriver().get_driver()
         job_urls = get_job_urls(driver)
 
         if 'Sign Up' in driver.page_source:
             scraping_job_results_serializer = ScrapingJobResultSerializer.model_construct(
-                **{'number_of_jobs': 0, 'exited_with_error': True, 'error_message': "'Sign Up' in driver.page_source"}
-            )
+                **{'number_of_jobs': 0, 'exited_with_error': True, 'error_message': "'Sign Up' in driver.page_source"})
             scraping_job_results_serializer.validate()
             scraping_job_results_serializer.save()
             exit(0)
 
         linked_scrapper = LinkedScrapper()
-        for url in enumerate(job_urls):
-            if session.query(LinkedInJob).filter_by(url=url).first():
+        for url in job_urls:
+
+            job = session.query(LinkedInJob).filter_by(url=url).first()
+            if job:
                 continue
             driver.get(url)
             if check_exists_by_xpath(driver, modal_dismiss_xpath):
@@ -157,10 +158,8 @@ if __name__ == '__main__':
                         scraping_job_results_serializer.save()
                         exit()
 
-            data = {
-                'title': job_title, 'description': job_description, 'location': job_location, 'age': job_age,
-                'url': url, 'company_id': company.id if company else None
-            }
+            data = {'title': job_title, 'description': job_description, 'location': job_location, 'age': job_age,
+                    'url': url, 'company_id': company.id if company else None}
 
             # Insert the job into the LinkedInJob table
             job = session.query(LinkedInJob).filter_by(url=url).first()
@@ -178,16 +177,16 @@ if __name__ == '__main__':
                     scraping_job_results_serializer.save()
 
                     exit()
-
             sleep(3)
 
-        kill_chrome(driver)
-        driver.quit()
     except Exception as e:
         scraping_job_results_serializer = ScrapingJobResultSerializer.model_construct(
             **{'number_of_jobs': number_of_scrapped_jobs, 'exited_with_error': True,
                'error_message': str(e)})
         scraping_job_results_serializer.validate()
         scraping_job_results_serializer.save()
+        raise e
     finally:
         session.close()
+        kill_chrome(driver)
+        driver.quit()
